@@ -1,16 +1,27 @@
 import { StatusBar } from "expo-status-bar";
 import React, { useState, useEffect } from "react";
-import { StyleSheet, Text, View, Button, TextInput } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  View,
+  Button,
+  TextInput,
+  ActivityIndicator,
+} from "react-native";
 import * as Permissions from "expo-permissions";
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system";
+import firebase from "./services";
 
 export default function App() {
+  const db = firebase.database();
+
   const [isRecording, setIsRecording] = useState(false);
   const [recording, setRecording] = useState(null);
   const [sound, setSound] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     permission();
@@ -48,9 +59,13 @@ export default function App() {
     },
   };
 
-  //const db = firebase.database();
-
   const startRecording = async () => {
+    if (sound !== null) {
+      await sound.unloadAsync();
+      sound.setOnPlaybackStatusUpdate(null);
+      setSound(null);
+    }
+
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: true,
       interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
@@ -102,61 +117,72 @@ export default function App() {
   };
 
   const uploadAudio = async () => {
-    const uri = recording.getURI();
-    try {
-      const blob = await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.onload = () => {
-          try {
-            resolve(xhr.response);
-          } catch (error) {
-            console.log("error:", error);
-          }
-        };
-        xhr.onerror = (e) => {
-          console.log(e);
-          reject(new TypeError("Network request failed"));
-        };
-        xhr.responseType = "blob";
-        xhr.open("GET", uri, true);
-        xhr.send(null);
-      });
-      if (blob != null) {
-        const uriParts = uri.split(".");
-        const fileType = uriParts[uriParts.length - 1];
-        firebase
-          .storage()
-          .ref()
-          .child(`nameOfTheFile.${fileType}`)
-          .put(blob, {
-            contentType: `audio/${fileType}`,
-          })
-          .then(() => {
-            console.log("Sent!");
-          })
-          .catch((e) => console.log("error:", e));
-      } else {
-        console.log("erroor with blob");
+    if (input != "") {
+      setLoading(true);
+      const uri = recording.getURI();
+      try {
+        const blob = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.onload = () => {
+            try {
+              resolve(xhr.response);
+            } catch (error) {
+              console.log("error:", error);
+            }
+          };
+          xhr.onerror = (e) => {
+            console.log(e);
+            reject(new TypeError("Network request failed"));
+          };
+          xhr.responseType = "blob";
+          xhr.open("GET", uri, true);
+          xhr.send(null);
+        });
+        if (blob != null) {
+          const uriParts = uri.split(".");
+          const fileType = uriParts[uriParts.length - 1];
+          firebase
+            .storage()
+            .ref()
+            .child(`${input}.${fileType}`)
+            .put(blob, {
+              contentType: `audio/${fileType}`,
+            })
+            .then(() => {
+              alert("Audio Salvo com sucesso!");
+              setLoading(false);
+            })
+            .catch((e) => alert(e));
+        } else {
+          alert("erroor with blob");
+          setLoading(false);
+        }
+      } catch (error) {
+        alert(error);
+        setLoading(false);
       }
-    } catch (error) {
-      console.log("error:", error);
+    } else {
+      alert("digite um nome para salvar o audio");
+      setLoading(false);
     }
   };
   const downloadAudio = async () => {
-    const uri = await firebase
-      .storage()
-      .ref("nameOfTheFile.filetype")
-      .getDownloadURL();
+    if (input != "") {
+      setLoading(true);
+      const uri = await firebase.storage().ref(`${input}.m4a`).getDownloadURL();
 
-    console.log("uri:", uri);
-
-    // The rest of this plays the audio
-    const soundObject = new Audio.Sound();
-    try {
-      await soundObject.loadAsync({ uri });
-      await soundObject.playAsync();
-    } catch (error) {
-      console.log("error:", error);
+      // The rest of this plays the audio
+      const soundObject = new Audio.Sound();
+      try {
+        await soundObject.loadAsync({ uri });
+        await soundObject.playAsync();
+        setLoading(false);
+      } catch (error) {
+        alert(`erro player: ${error}`);
+        setLoading(false);
+      }
+    } else {
+      alert("digite o nome do audio para download");
     }
   };
 
@@ -166,8 +192,10 @@ export default function App() {
     try {
       await soundObject.loadAsync({ uri });
       await soundObject.playAsync();
+      setLoading(false);
     } catch (error) {
       alert(error);
+      setLoading(false);
     }
   };
 
@@ -183,7 +211,7 @@ export default function App() {
       <Text style={{ fontSize: 40, paddingBottom: 100 }}>Meu APP</Text>
       <TextInput
         style={{
-          marginBottom: 100,
+          marginBottom: 50,
           height: 40,
           width: 200,
           borderColor: "#ddd",
@@ -195,6 +223,13 @@ export default function App() {
           setInput(value);
         }}
       />
+      {loading && (
+        <ActivityIndicator
+          color="#121212"
+          size={45}
+          style={{ paddingBottom: 50 }}
+        />
+      )}
       {!isRecording && (
         <Button
           onPress={() => {
@@ -217,9 +252,21 @@ export default function App() {
           onPress={() => {
             playAudio();
           }}
-          title="Play Audio Nuvem"
+          title="Play Audio"
         />
       )}
+      <Button
+        onPress={() => {
+          uploadAudio();
+        }}
+        title="Upload"
+      />
+      <Button
+        onPress={() => {
+          downloadAudio();
+        }}
+        title="Download"
+      />
       <StatusBar style="auto" />
     </View>
   );
