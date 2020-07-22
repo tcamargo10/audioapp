@@ -1,6 +1,6 @@
 import { StatusBar } from "expo-status-bar";
 import React, { useState, useEffect } from "react";
-import { StyleSheet, Text, View, Button } from "react-native";
+import { StyleSheet, Text, View, Button, TextInput } from "react-native";
 import * as Permissions from "expo-permissions";
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system";
@@ -10,6 +10,7 @@ export default function App() {
   const [recording, setRecording] = useState(null);
   const [sound, setSound] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [input, setInput] = useState("");
 
   useEffect(() => {
     permission();
@@ -18,6 +19,7 @@ export default function App() {
   const styles = StyleSheet.create({
     container: {
       flex: 1,
+      padding: 50,
       backgroundColor: "#fff",
       alignItems: "center",
       justifyContent: "center",
@@ -178,6 +180,21 @@ export default function App() {
 
   return (
     <View style={styles.container}>
+      <Text style={{ fontSize: 40, paddingBottom: 100 }}>Meu APP</Text>
+      <TextInput
+        style={{
+          marginBottom: 100,
+          height: 40,
+          width: 200,
+          borderColor: "#ddd",
+          borderWidth: 1,
+        }}
+        placeholder="Digite a Lista"
+        value={input}
+        onChangeText={(value) => {
+          setInput(value);
+        }}
+      />
       {!isRecording && (
         <Button
           onPress={() => {
@@ -194,13 +211,13 @@ export default function App() {
           title="Stop Recording"
         />
       )}
+      {isRecording && <Text>Gravando...</Text>}
       {recording && (
         <Button
-          style={{ marginTop: 30 }}
           onPress={() => {
             playAudio();
           }}
-          title="Play Audio"
+          title="Play Audio Nuvem"
         />
       )}
       <StatusBar style="auto" />
