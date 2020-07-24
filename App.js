@@ -7,11 +7,14 @@ import {
   Button,
   TextInput,
   ActivityIndicator,
+  TouchableOpacity,
 } from "react-native";
 import * as Permissions from "expo-permissions";
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system";
 import firebase from "./services";
+import Slider from "@react-native-community/slider";
+import { FontAwesome5 } from "@expo/vector-icons";
 
 export default function App() {
   const db = firebase.database();
@@ -22,6 +25,10 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [colorPlay, setColorPlay] = useState("#ddd");
+  const [iconPlay, setIconPlay] = useState("play");
+  const [totaltime, setTotalTime] = useState(1);
+  const [currenttime, setCurrentTime] = useState(0);
 
   useEffect(() => {
     permission();
@@ -31,9 +38,24 @@ export default function App() {
     container: {
       flex: 1,
       padding: 50,
-      backgroundColor: "#fff",
+      backgroundColor: "#EAEAEC",
       alignItems: "center",
       justifyContent: "center",
+    },
+    playbutton: {
+      backgroundColor: "#FFF",
+      borderColor: colorPlay,
+      borderWidth: 12,
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      justifyContent: "center",
+      alignItems: "center",
+      marginHorizontal: 32,
+      shadowColor: "#5D3F6A",
+      shadowRadius: 30,
+      shadowOpacity: 0.5,
+      elevation: 5,
     },
   });
 
@@ -101,11 +123,11 @@ export default function App() {
       shouldDuckAndroid: true,
       interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
       playThroughEarpieceAndroid: false,
-      staysActiveInBackground: true,
+      staysActiveInBackground: false,
     });
     const { sound: _sound, status } = await recording.createNewLoadedSoundAsync(
       {
-        isLooping: true,
+        isLooping: false,
         isMuted: false,
         volume: 1.0,
         rate: 1.0,
@@ -171,31 +193,64 @@ export default function App() {
       setLoading(true);
       const uri = await firebase.storage().ref(`${input}.m4a`).getDownloadURL();
 
-      // The rest of this plays the audio
-      const soundObject = new Audio.Sound();
-      try {
-        await soundObject.loadAsync({ uri });
-        await soundObject.playAsync();
-        setLoading(false);
-      } catch (error) {
-        alert(`erro player: ${error}`);
-        setLoading(false);
+      if (sound != null) {
+        await sound.unloadAsync();
+        setSound(null);
       }
-    } else {
-      alert("digite o nome do audio para download");
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
+        playsInSilentModeIOS: true,
+        playsInSilentLockedModeIOS: true,
+        shouldDuckAndroid: true,
+        interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
+        playThroughEarpieceAndroid: false,
+        staysActiveInBackground: false,
+      });
+      const { sound: _sound, status } = await Audio.Sound.createAsync({
+        uri: uri,
+        isLooping: false,
+        isMuted: false,
+        volume: 1.0,
+        rate: 1.0,
+        shouldCorrectPitch: true,
+      });
+      setLoading(false);
+      setSound(_sound);
     }
   };
 
-  const playAudio = async () => {
-    const uri = recording.getURI();
-    const soundObject = new Audio.Sound();
+  const playAudio = () => {
     try {
-      await soundObject.loadAsync({ uri });
-      await soundObject.playAsync();
-      setLoading(false);
+      if (sound != null) {
+        if (!isPlaying) {
+          setColorPlay("#32CD32");
+          sound.playAsync();
+          setIconPlay("pause");
+          setIsPlaying(true);
+          sound.setOnPlaybackStatusUpdate((status) => {
+            setCurrentTime(status.positionMillis / 1000);
+            setTotalTime(status.durationMillis / 1000);
+            if (status.didJustFinish) {
+              sound.stopAsync();
+              setIsPlaying(false);
+              setColorPlay("#ddd");
+              setIconPlay("play");
+              setTotalTime(1);
+              setCurrentTime(0);
+              return;
+            }
+          });
+        } else {
+          sound.pauseAsync();
+          setIsPlaying(false);
+          setColorPlay("#ddd");
+          setIconPlay("play");
+        }
+      }
     } catch (error) {
       alert(error);
-      setLoading(false);
     }
   };
 
@@ -247,14 +302,6 @@ export default function App() {
         />
       )}
       {isRecording && <Text>Gravando...</Text>}
-      {recording && (
-        <Button
-          onPress={() => {
-            playAudio();
-          }}
-          title="Play Audio"
-        />
-      )}
       <Button
         onPress={() => {
           uploadAudio();
@@ -267,7 +314,61 @@ export default function App() {
         }}
         title="Download"
       />
-      <StatusBar style="auto" />
+
+      <View
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          justifyContent: "center",
+          alignItems: "center",
+          marginTop: 20,
+        }}
+      >
+        <TouchableOpacity>
+          <FontAwesome5
+            name="backward"
+            size={32}
+            color="#93ABB3"
+          ></FontAwesome5>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.playbutton} onPress={playAudio}>
+          <FontAwesome5
+            name={iconPlay}
+            size={32}
+            color="#3D425C"
+            style={isPlaying ? { marginLeft: 0 } : { marginLeft: 8 }}
+          ></FontAwesome5>
+        </TouchableOpacity>
+        <TouchableOpacity>
+          <FontAwesome5 name="forward" size={32} color="#93ABB3"></FontAwesome5>
+        </TouchableOpacity>
+        <StatusBar style="auto" />
+      </View>
+
+      <View
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Text style={{ marginRight: 10 }}>{`${currenttime.toFixed(0)}s`}</Text>
+        <Slider
+          style={{
+            width: 200,
+            height: 40,
+            marginTop: 25,
+            alignItens: "center",
+          }}
+          minimumValue={0}
+          maximumValue={totaltime ? totaltime : 1}
+          value={currenttime ? currenttime : 0}
+          minimumTrackTintColor="#FFFFFF"
+          maximumTrackTintColor="#000000"
+        />
+        <Text style={{ marginLeft: 10 }}>{`${totaltime.toFixed(0)}s`}</Text>
+      </View>
     </View>
   );
 }
